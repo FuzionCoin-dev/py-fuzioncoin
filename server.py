@@ -2,6 +2,8 @@ import threading
 import socket
 
 import connection
+import protocol
+import logger
 
 _logger = logger.Logger("SERVER")
 
@@ -18,11 +20,17 @@ class Server:
         self.sock.bind(self.address)
 
         self.sock.listen()
-
         while True:
             conn, addr = self.sock.accept()
-            _logger.info(f"Connection from {list(addr)[0]}:{list(addr)[1]} accepted!")
-            handler = connection.ConnHandler(conn, addr)
-            handler.start()
+            (accept_bool, reject_reason) = protocol.welcome_message_server(conn)
 
-            self._clients.append(handler)
+            if accept_bool:
+                _logger.info(f"Connection from {list(addr)[0]}:{list(addr)[1]} accepted!")
+                handler = connection.ConnHandler(conn, addr)
+                handler.start()
+
+                self._clients.append(handler)
+            else:
+                _logger.warn(f"Connection from {list(addr)[0]}:{list(addr)[1]} rejected: {reject_reason}")
+                conn.shutdown(socket.SHUT_RDWR)
+                conn.close()

@@ -16,21 +16,11 @@ class ConnHandler(threading.Thread):
         running = True
 
         while running:
-            message = b""
+            message = protocol.recv_msg(self.conn)
+            protocol.handle_message(self.conn, self.addr, message)
 
-        while True:
-            packet = self.conn.recv(1024)
-            if not packet:
-                break
-            message += packet
-
-            if len(message) > 0:
-                for m in message.split(bytes(0x00)):
-                    protocol.handle_message(conn, addr, m)
-
-
-            if len(message_queue) > 0:
-                self.conn.sendall(self.message_queue.pop(0))
+            if len(self.send_queue) > 0:
+                protocol.send_msg(self.conn, self.send_queue.pop(0))
 
 
     def send(message: bytes):

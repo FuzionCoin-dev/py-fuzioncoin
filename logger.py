@@ -1,4 +1,5 @@
 import os
+import datetime
 
 use_color: bool
 
@@ -19,8 +20,12 @@ except ImportError:
     # Falling back to uncolored output
     color_support = False
 
+def get_time():
+    return datetime.datetime.today().strftime('%d-%m-%Y %H:%M:%S')
+
 class Colors:
-    GRAY = colorama.Fore.WHITE
+    MODNAME = colorama.Fore.WHITE + colorama.Style.BRIGHT
+    GRAY = colorama.Fore.WHITE + colorama.Style.RESET_ALL
     INFO = colorama.Fore.CYAN + colorama.Style.BRIGHT
     WARN = colorama.Fore.YELLOW + colorama.Style.BRIGHT
     ERROR = colorama.Fore.RED + colorama.Style.BRIGHT
@@ -40,24 +45,24 @@ class Logger:
 
     def info(self, message):
         if self.use_color:
-            print(f"{Colors.GRAY}[{self.module_name}/INFO]: {Colors.INFO}{message}")
+            print(f"{Colors.GRAY}[{Colors.MODNAME}{self.module_name}/INFO {Colors.GRAY}{get_time()}]: {Colors.INFO}{message}")
         else:
-            print(f"[{self.module_name}/INFO]: {message}")
+            print(f"[{self.module_name}/INFO {get_time()}]: {message}")
 
     def warn(self, message):
         if self.use_color:
-            print(f"{Colors.GRAY}[{self.module_name}/WARN]: {Colors.WARN}{message}")
+            print(f"{Colors.GRAY}[{Colors.MODNAME}{self.module_name}/WARN {Colors.GRAY}{get_time()}]: {Colors.WARN}{message}")
         else:
-            print(f"[{self.module_name}/WARN]: {message}")
+            print(f"[{self.module_name}/WARN {get_time()}]: {message}")
 
     def error(self, message):
         if self.use_color:
-            print(f"{Colors.GRAY}[{self.module_name}/ERROR]: {Colors.ERROR}{message}")
+            print(f"{Colors.GRAY}[{Colors.MODNAME}{self.module_name}/ERROR {Colors.GRAY}{get_time()}]: {Colors.ERROR}{message}")
         else:
-            print(f"[{self.module_name}/ERROR]: {message}")
+            print(f"[{self.module_name}/ERROR {get_time()}]: {message}")
 
     def ok(self, message):
         if self.use_color:
-            print(f"{Colors.GRAY}[{self.module_name}/OK]: {Colors.OK}{message}")
+            print(f"{Colors.GRAY}[{Colors.MODNAME}{self.module_name}/OK {Colors.GRAY}{get_time()}]: {Colors.OK}{message}")
         else:
-            print(f"[{self.module_name}/OK]: {message}")
+            print(f"[{self.module_name}/OK {get_time()}]: {message}")

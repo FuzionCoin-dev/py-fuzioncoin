@@ -1,6 +1,5 @@
-from hashlib import sha256, sha1
+from hashlib import sha256
 import ecdsa
-import base64
 
 class PrivateKey:
     def __init__(self):
