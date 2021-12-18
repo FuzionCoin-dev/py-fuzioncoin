@@ -60,14 +60,14 @@ def welcome_message_server(conn: socket.socket):
         return (False, "Bad response received!")
 
     if not ("connected" in response_dict and response_dict["connected"] == True):
-        return (False, "Client cancelled connection." + ((f" reason: {response_dict['reason']}") if "reason" in response_dict else ""))
+        return (False, "Client canceled connection." + ((f" reason: {response_dict['reason']}") if "reason" in response_dict else ""))
 
     if not ("ua" in response_dict and response_dict["ua"].split("/")[0] == "FuzionCoin"):
         return (False, "Client isn't running FuzionCoin node!")
 
     return (True, None)
 
-def welcome_message_client_cancell_connection(conn: socket.socket, reason: str):
+def welcome_message_client_cancel_connection(conn: socket.socket, reason: str):
     response_dict = {
         "method": "welcome_response",
         "connected": False,
@@ -89,7 +89,7 @@ def welcome_message_client(conn: socket.socket):
     while not message:
         if time.time() - start_time >= 3:
             r = "Server response timeout!"
-            welcome_message_client_cancell_connection(conn, r)
+            welcome_message_client_cancel_connection(conn, r)
             return (False, r)
 
         message = recv_msg(conn)
@@ -98,18 +98,18 @@ def welcome_message_client(conn: socket.socket):
         message_dict = json.loads(message)
     except ValueError:
         r = "Bad response received! Cannot decode response."
-        welcome_message_client_cancell_connection(conn, r)
+        welcome_message_client_cancel_connection(conn, r)
         return (False, r)
 
     # Decide whether client should accept server's user agent
     if not ("method" in message_dict and message_dict["method"] == "welcome"):
         r = "Bad response received!"
-        welcome_message_client_cancell_connection(conn, r)
+        welcome_message_client_cancel_connection(conn, r)
         return (False, r)
 
     if not ("ua" in message_dict and message_dict["ua"].split("/")[0] == "FuzionCoin"):
         r = "Server isn't running FuzionCoin node!"
-        welcome_message_client_cancell_connection(conn, r)
+        welcome_message_client_cancel_connection(conn, r)
         return (False, r)
 
     # Accept
