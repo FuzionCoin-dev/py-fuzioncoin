@@ -5,7 +5,7 @@ import protocol
 
 class ConnHandler(threading.Thread):
     def __init__(self, conn: socket.socket, addr: tuple):
-        threading.Thread.__init__(self)
+        threading.Thread.__init__(self, daemon=True)
 
         self.conn = conn
         self.addr = addr

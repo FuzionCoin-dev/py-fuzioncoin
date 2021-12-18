@@ -1,6 +1,5 @@
 import argparse
 import json
-import random
 
 import logger
 
@@ -36,11 +35,50 @@ def setup_logger():
     MAIN_LOGGER = logger.Logger("MAIN")
 
 
-def init_server():
+# yields all peers, that we are connected to
+def peers_generator():
+    for c in SERVER._clients:
+        yield c
+    for s in CLIENT._servers:
+        yield s
+
+def disp_name(s: str):
+    s = s.replace("_", " ")
+    s = s[0].upper() + s[1::]
+    return s
+
+
+def log_config():
+    MAIN_LOGGER.info("---------------[ Configuration: ]---------------")
+    for x,y in sorted(CONFIG.items()):
+        if isinstance(y, list):
+            MAIN_LOGGER.info(f"{disp_name(x)}:")
+            for i in y:
+                MAIN_LOGGER.info(" "*(len(disp_name(x)) + 2) + i)
+        else:
+            MAIN_LOGGER.info(f"{disp_name(x)}: {y}")
+
+    MAIN_LOGGER.info("------------------------------------------------")
+
+def main():
     global SERVER
+    global CLIENT
+
+    MAIN_LOGGER.info("Starting node...")
+    MAIN_LOGGER.info("""
+    _____       ______
+    |  __ \     |  ____|
+    | |__) |   _| |__ _   _ _______
+    |  ___/ | | |  __| | | |_  / __|
+    | |   | |_| | |  | |_| |/ / (__
+    |_|    \__, |_|   \__,_/___\___|
+            __/ |
+           |___/
+    """)
+
+    log_config()
 
     import server
-
     if CONFIG["server_port"]:
         SERVER = server.Server(port=CONFIG["server_port"])
     else:
@@ -48,18 +86,13 @@ def init_server():
 
     SERVER.start()
 
-def init_client():
-    global CLIENT
-
     import client
     CLIENT = client.Client()
 
-# yields all peers, that we are connected to
-def peers_generator():
-    for c in SERVER._clients:
-        yield c
-    for s in CLIENT._servers:
-        yield s
+    client.connect_to_trusted_nodes(CLIENT, CONFIG["trusted_nodes"].copy(), CONFIG["max_servers"])
+
+    while True:
+        pass
 
 if __name__ == "__main__":
     # Setup argparse
@@ -85,20 +118,11 @@ if __name__ == "__main__":
     load_config()
     setup_logger()
 
-    MAIN_LOGGER.info("Starting node...")
-
-    init_server()
-    init_client()
-
-    # Automatically try to connect to some of trusted nodes
-    nodes = CONFIG["trusted_nodes"].copy()
-    random.shuffle(nodes)
-    if len(nodes) > CONFIG["max_servers"]:
-        nodes = nodes[:config["max_servers"]]
-
-    for p in nodes:
-        if ":" in p:
-            x = p.split(":")
-            CLIENT.connect(x[0], int(x[1]))
-        else:
-            CLIENT.connect(p)
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("KeyboardInterrupt")
+        MAIN_LOGGER.info("Stopping node...")
+        SERVER.close()
+        CLIENT.close()
+        raise SystemExit
