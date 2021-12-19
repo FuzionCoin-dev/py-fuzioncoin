@@ -22,11 +22,25 @@ Edit configuration file (`config.json`) to match your requirements.
 Remember to add at least 1 valid trusted peer so that a peer can connect to the network.
 
 ## Launch peer
-You can launch peer with following command:
+You can launch peer with following commands:
+
+on Linux and macOS:
 ```sh
-python main.py
+chmod +x launch.sh
+./launch.sh
 ```
-Or with specify configuration file location
+on Windows:
 ```sh
-python main.py --config PATH
+launch.bat
+```
+
+Or with specify configuration file location
+
+on Linux and macOS:
+```sh
+./launch.sh --config PATH
+```
+on Windows:
+```sh
+launch.bat --config PATH
 ```
