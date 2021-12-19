@@ -22,7 +22,7 @@ Edit configuration file (`config.json`) to match your requirements.
 Remember to add at least 1 valid trusted peer so that a peer can connect to the network.
 
 ## Launch peer
-You can launch peer with following commands:
+**You can launch peer with following commands:**
 
 on Linux and macOS:
 ```sh
@@ -34,7 +34,7 @@ on Windows:
 launch.bat
 ```
 
-Or with specify configuration file location
+**Or with specifying configuration file location:**
 
 on Linux and macOS:
 ```sh
