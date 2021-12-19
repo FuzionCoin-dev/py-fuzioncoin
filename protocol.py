@@ -31,6 +31,13 @@ def recvall(conn, n):
         data += packet
     return data
 
+def broadcast(msg: str, server, client):
+    for conn in server._clients:
+        send_msg(conn, msg)
+
+    for conn in client._servers:
+        send_msg(conn, msg)
+
 ################################################################
 # WELCOME MESSAGES (ENSTABILISHING CONNECTION)
 ################################################################

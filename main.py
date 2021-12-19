@@ -1,7 +1,18 @@
 import argparse
 import json
+import os
 
 import logger
+
+DEFAULT_CONFIG = {
+    "colored_output": False,
+    "max_servers": 10,
+    "max_clients": 5,
+    "trusted_nodes": [],
+    "data_directory": os.path.abspath("data/"),
+    "server_ip": "0.0.0.0",  # All interfaces
+    "server_port": 47685
+}
 
 def load_config():
     global CONFIG
@@ -10,21 +21,20 @@ def load_config():
     try:
         CONFIG = json.load(args.config)
     except:
-        print("Failed to parse configuration file!")
+        print("ERROR: Failed to parse configuration file!")
+        print("       This is not a valid JSON file")
         raise SystemExit
 
-    # DEFAULTS
-    if not "colored_output" in CONFIG:
-        CONFIG["colored_output"] = False
-
-    if not "max_clients" in CONFIG:
-        CONFIG["max_clients"] = 5
-
-    if not "max_servers" in CONFIG:
-        CONFIG["max_servers"] = 10
-
-    if not "trusted_nodes" in CONFIG:
-        CONFIG["trusted_nodes"] = []
+    for x, y in DEFAULT_CONFIG.items():
+        if not x in CONFIG:
+            # Load default setting
+            CONFIG[x] = y
+        elif type(CONFIG[x]) is not type(y):
+            print("ERROR: Failed to parse configuration file!")
+            print(f"       Bad value for key {x} (should be {type(y).__name__}, got {type(CONFIG[x]).__name__})")
+            raise SystemExit
+        elif x == "data_directory":
+            CONFIG[x] = os.path.abspath(CONFIG[x])
 
     args.config.close()
 
@@ -34,29 +44,20 @@ def setup_logger():
     logger.setup_color_usage(CONFIG["colored_output"])
     MAIN_LOGGER = logger.Logger("MAIN")
 
-
-# yields all peers, that we are connected to
-def peers_generator():
-    for c in SERVER._clients:
-        yield c
-    for s in CLIENT._servers:
-        yield s
-
 def disp_name(s: str):
     s = s.replace("_", " ")
     s = s[0].upper() + s[1::]
     return s
 
-
 def log_config():
     MAIN_LOGGER.info("---------------[ Configuration: ]---------------")
     for x,y in sorted(CONFIG.items()):
         if isinstance(y, list):
-            MAIN_LOGGER.info(f"{disp_name(x)}:")
+            MAIN_LOGGER.info(f"{disp_name(x)}:" + (" None" if len(y) == 0 else ""))
             for i in y:
                 MAIN_LOGGER.info(" "*(len(disp_name(x)) + 2) + i)
         else:
-            MAIN_LOGGER.info(f"{disp_name(x)}: {y}")
+            MAIN_LOGGER.info(f"{disp_name(x)}: {y}" + (" (default)" if DEFAULT_CONFIG[x] == y else ""))
 
     MAIN_LOGGER.info("------------------------------------------------")
 
