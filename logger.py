@@ -1,12 +1,20 @@
 import os
 import datetime
 
-use_color: bool
+def get_time():
+    return datetime.datetime.today().strftime('%d-%m-%Y %H:%M:%S')
 
-def setup_color_usage(color: bool):
+def setup(color_usage: bool, log_file: str):
     global use_color
-    use_color = color
+    global _log_file
+    use_color = color_usage
+    _log_file = log_file
 
+    if log_file is None:
+        return
+
+    with open(_log_file, "a+") as f:
+        print(("" if f.tell() == 0 else "\n\n") + f"--------------------[LOG BEGIN {get_time()}]--------------------\n\n", file=f)
 try:
     import colorama
     color_support = True
@@ -19,9 +27,6 @@ except ImportError:
     # Colorama not found
     # Falling back to uncolored output
     color_support = False
-
-def get_time():
-    return datetime.datetime.today().strftime('%d-%m-%Y %H:%M:%S')
 
 class Colors:
     MODNAME = colorama.Fore.WHITE + colorama.Style.BRIGHT
@@ -49,11 +54,19 @@ class Logger:
         else:
             print(f"[{self.module_name}/INFO {get_time()}]: {message}")
 
+        if _log_file is not None:
+            with open(_log_file, "a") as f:
+                print(f"[{self.module_name}/INFO {get_time()}]: {message}", file=f)
+
     def warn(self, message):
         if self.use_color:
             print(f"{Colors.GRAY}[{Colors.MODNAME}{self.module_name}/WARN {Colors.GRAY}{get_time()}]: {Colors.WARN}{message}")
         else:
             print(f"[{self.module_name}/WARN {get_time()}]: {message}")
+
+        if _log_file is not None:
+            with open(_log_file, "a") as f:
+                print(f"[{self.module_name}/WARN {get_time()}]: {message}", file=f)
 
     def error(self, message):
         if self.use_color:
@@ -61,8 +74,16 @@ class Logger:
         else:
             print(f"[{self.module_name}/ERROR {get_time()}]: {message}")
 
+        if _log_file is not None:
+            with open(_log_file, "a") as f:
+                print(f"[{self.module_name}/ERROR {get_time()}]: {message}", file=f)
+
     def ok(self, message):
         if self.use_color:
             print(f"{Colors.GRAY}[{Colors.MODNAME}{self.module_name}/OK {Colors.GRAY}{get_time()}]: {Colors.OK}{message}")
         else:
             print(f"[{self.module_name}/OK {get_time()}]: {message}")
+
+        if _log_file is not None:
+            with open(_log_file, "a") as f:
+                print(f"[{self.module_name}/OK {get_time()}]: {message}", file=f)

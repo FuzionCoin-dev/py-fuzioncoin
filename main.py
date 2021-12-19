@@ -11,7 +11,8 @@ DEFAULT_CONFIG = {
     "trusted_nodes": [],
     "data_directory": os.path.abspath("data/"),
     "server_ip": "0.0.0.0",  # All interfaces
-    "server_port": 47685
+    "server_port": 47685,
+    "log_file": None
 }
 
 def load_config():
@@ -30,18 +31,21 @@ def load_config():
             # Load default setting
             CONFIG[x] = y
         elif type(CONFIG[x]) is not type(y):
-            print("ERROR: Failed to parse configuration file!")
-            print(f"       Bad value for key {x} (should be {type(y).__name__}, got {type(CONFIG[x]).__name__})")
-            raise SystemExit
-        elif x == "data_directory":
-            CONFIG[x] = os.path.abspath(CONFIG[x])
+            if not (x == "log_file" and isinstance(CONFIG[x], str)):
+                print("ERROR: Failed to parse configuration file!")
+                print(f"       Bad value for key {x} (should be {type(y).__name__}, got {type(CONFIG[x]).__name__})")
+                raise SystemExit
+
+        if x == "data_directory" or x == "log_file":
+            if CONFIG[x] is not None:
+                CONFIG[x] = os.path.abspath(CONFIG[x])
 
     args.config.close()
 
 
 def setup_logger():
     global MAIN_LOGGER
-    logger.setup_color_usage(CONFIG["colored_output"])
+    logger.setup(color_usage=CONFIG["colored_output"], log_file=CONFIG["log_file"])
     MAIN_LOGGER = logger.Logger("MAIN")
 
 def disp_name(s: str):
@@ -122,7 +126,7 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("KeyboardInterrupt")
+        MAIN_LOGGER.info("Got KeyboardInterrupt")
         MAIN_LOGGER.info("Stopping node...")
         SERVER.close()
         CLIENT.close()
