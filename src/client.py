@@ -65,7 +65,8 @@ class Client:
 @handle_exception(_logger)
 def connect_to_trusted_nodes(client: Client, nodes: list, max_servers: int):
     if len(nodes) == 0:
-        _logger.warning("There are no trusted nodes added!")
+        _logger.warn("There are no trusted nodes added!")
+        return
 
     if max_servers >= len(nodes):
         _logger.info("Connecting to trusted nodes...")
@@ -102,6 +103,6 @@ def connect_to_trusted_nodes(client: Client, nodes: list, max_servers: int):
             break
 
     if success > 0:
-        _logger.info(f"Successfully connected to {success} nodes...")
+        _logger.info(f"Successfully connected to {success} trusted node" + ("" if success == 1 else "s") + "...")
     else:
         _logger.warn(f"Failed to connect to all of trusted nodes!")

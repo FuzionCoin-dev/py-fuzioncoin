@@ -29,7 +29,7 @@ class Server:
                 _logger.error(f"Unable to bind address {self.address[0]}:{self.address[1]}! Retrying in 5 seconds...")
                 time.sleep(5)
 
-        _logger.info(f"Bound address: {self.address[0]}" + (" (all interfaces)" if self.address[0] == "0.0.0.0" else "") + f" and port: {self.address[1]}")
+        _logger.ok(f"Bound address: {self.address[0]}" + (" (all interfaces)" if self.address[0] == "0.0.0.0" else "") + f" and port: {self.address[1]}")
 
         threading.Thread(target=self.handler, daemon=True).start()
         threading.Thread(target=self.conn_watchdog, daemon=True).start()
@@ -45,14 +45,13 @@ class Server:
             (accept_bool, reject_reason) = protocol.welcome_message_server(conn)
 
             if accept_bool:
-                _logger.info(f"Connection from {list(addr)[0]}:{list(addr)[1]} accepted!")
+                _logger.ok(f"Connection from {list(addr)[0]}:{list(addr)[1]} accepted!")
                 handler = connection.ConnHandler(conn, addr)
                 handler.start()
 
                 self._clients.append(handler)
             else:
                 _logger.warn(f"Connection from {list(addr)[0]}:{list(addr)[1]} rejected: {reject_reason}")
-                conn.shutdown(socket.SHUT_RDWR)
                 conn.close()
 
     @handle_exception(_logger)

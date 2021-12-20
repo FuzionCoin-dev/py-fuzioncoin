@@ -4,19 +4,25 @@ import datetime
 def get_time():
     return datetime.datetime.today().strftime('%d-%m-%Y %H:%M:%S')
 
-def setup(color_usage: bool, log_file: str, debug: bool):
+def setup(color_usage: bool, logs_directory: str, debug: bool):
     global use_color
     global _log_file
     global _debug
     use_color = color_usage
-    _log_file = log_file
+
+    if logs_directory is not None:
+        _log_file = os.path.join(logs_directory, f"{datetime.datetime.today().strftime('%d-%m-%Y_%H:%M:%S')}.log")
+    else:
+        _log_file = None
+
     _debug = debug
 
-    if log_file is None:
+    if _log_file is None:
         return
 
-    with open(_log_file, "a+") as f:
-        print(("" if f.tell() == 0 else "\n\n") + f"--------------------[LOG BEGIN {get_time()}]--------------------\n\n", file=f)
+    if not os.path.exists(logs_directory):
+        os.mkdir(logs_directory)
+
 try:
     import colorama
     color_support = True

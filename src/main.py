@@ -15,7 +15,7 @@ DEFAULT_CONFIG = {
     "data_directory": os.path.abspath("data/"),
     "server_ip": "0.0.0.0",  # All interfaces
     "server_port": 47685,
-    "log_file": None,
+    "logs_directory": None,
     "debug_messages": False
 }
 
@@ -35,12 +35,12 @@ def load_config():
             # Load default setting
             CONFIG[x] = y
         elif type(CONFIG[x]) is not type(y):
-            if not (x == "log_file" and isinstance(CONFIG[x], str)):
+            if not (x == "logs_directory" and isinstance(CONFIG[x], str)):
                 print("ERROR: Failed to parse configuration file!")
                 print(f"       Bad value for key {x} (should be {type(y).__name__}, got {type(CONFIG[x]).__name__})")
                 raise SystemExit
 
-        if x == "data_directory" or x == "log_file":
+        if x == "data_directory" or x == "logs_directory":
             if CONFIG[x] is not None:
                 CONFIG[x] = os.path.abspath(CONFIG[x])
 
@@ -49,7 +49,7 @@ def load_config():
 
 def setup_logger():
     global MAIN_LOGGER
-    logger.setup(color_usage=CONFIG["colored_output"], log_file=CONFIG["log_file"], debug=CONFIG["debug_messages"])
+    logger.setup(color_usage=CONFIG["colored_output"], logs_directory=CONFIG["logs_directory"], debug=CONFIG["debug_messages"])
     MAIN_LOGGER = logger.Logger("MAIN")
 
 def disp_name(s: str):
@@ -66,7 +66,10 @@ def log_config():
             for i in y:
                 MAIN_LOGGER.info(" "*(len(disp_name(x)) + 2) + i)
         else:
-            MAIN_LOGGER.info(f"{disp_name(x)}: {y}" + (" (default)" if DEFAULT_CONFIG[x] == y else ""))
+            try:
+                MAIN_LOGGER.info(f"{disp_name(x)}: {y}" + (" (default)" if DEFAULT_CONFIG[x] == y else ""))
+            except KeyError:
+                pass
 
     MAIN_LOGGER.info("------------------------------------------------")
 
@@ -114,16 +117,33 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--launch-path",
+        help=argparse.SUPPRESS,
+        type=str,
+        required=False,
+        dest="launch_path",
+        default=os.getcwd()
+    )
+
+    parser.add_argument(
         "-c", "--config",
         help="Node configuration file",
-        type=argparse.FileType("r"),
+        type=str,
         required=False,
         metavar="PATH",
         dest="config",
-        default="config.json"
+        default=os.path.join(os.getcwd(), "config.json")
     )
 
     args = parser.parse_args()
+
+    try:
+        if args.config.startswith("/"):
+            args.config = open(args.config, "r")
+        else:
+            args.config = open(os.path.join(args.launch_path, args.config), "r")
+    except:
+        raise TypeError("Invalid configuration file path!")
 
     load_config()
     setup_logger()
