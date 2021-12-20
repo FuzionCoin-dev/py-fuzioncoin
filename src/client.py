@@ -6,6 +6,7 @@ import time
 import connection
 import logger
 import protocol
+from exception_handler import handle_exception
 
 _logger = logger.Logger("CLIENT")
 
@@ -15,6 +16,7 @@ class Client:
         self.active = True
         threading.Thread(target=self.conn_watchdog, daemon=True).start()
 
+    @handle_exception(_logger)
     def connect(self, addr: str, port: int = 47685):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -42,13 +44,15 @@ class Client:
         self._servers.append(handler)
         return True
 
+    @handle_exception(_logger)
     def conn_watchdog(self):
         while self.active:
             time.sleep(0.5)
             for i in range(len(self._servers)):
                 if not self._servers[i].is_alive():
-                    self._servers.remove(i)
+                    self._servers.pop(i)
 
+    @handle_exception(_logger)
     def close(self):
         self.active = False
 
@@ -58,6 +62,7 @@ class Client:
             s.conn.close()
 
 
+@handle_exception(_logger)
 def connect_to_trusted_nodes(client: Client, nodes: list, max_servers: int):
     if len(nodes) == 0:
         _logger.warning("There are no trusted nodes added!")

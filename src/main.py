@@ -3,6 +3,9 @@ import json
 import os
 
 import logger
+from exception_handler import handle_exception
+
+MAIN_LOGGER = None
 
 DEFAULT_CONFIG = {
     "colored_output": False,
@@ -54,6 +57,7 @@ def disp_name(s: str):
     s = s[0].upper() + s[1::]
     return s
 
+@handle_exception(MAIN_LOGGER)
 def log_config():
     MAIN_LOGGER.info("---------------[ Configuration: ]---------------")
     for x,y in sorted(CONFIG.items()):

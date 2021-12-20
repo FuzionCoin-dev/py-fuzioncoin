@@ -5,6 +5,7 @@ import time
 import connection
 import protocol
 import logger
+from exception_handler import handle_exception
 
 _logger = logger.Logger("SERVER")
 
@@ -13,6 +14,7 @@ class Server:
         self.address = (addr, port)
         self._clients = []
 
+    @handle_exception(_logger)
     def start(self):
         _logger.info("Starting server...")
 
@@ -32,6 +34,7 @@ class Server:
         threading.Thread(target=self.handler, daemon=True).start()
         threading.Thread(target=self.conn_watchdog, daemon=True).start()
 
+    @handle_exception(_logger)
     def handler(self):
         self.sock.listen()
         _logger.info("Listening for connections...")
@@ -52,13 +55,15 @@ class Server:
                 conn.shutdown(socket.SHUT_RDWR)
                 conn.close()
 
+    @handle_exception(_logger)
     def conn_watchdog(self):
         time.sleep(0.5)
         while self.running:
             for i in range(len(self._clients)):
                 if not self._clients[i].is_alive():
-                    self._clients.remove(i)
+                    self._clients.pop(i)
 
+    @handle_exception(_logger)
     def close(self):
         self.running = False
 

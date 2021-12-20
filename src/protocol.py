@@ -35,11 +35,7 @@ def recv_msg(conn):
 def recvall(conn, n):
     data = b""
     while len(data) < n:
-        try:
-            packet = conn.recv(n - len(data))
-        except socket.error:
-            # No message available
-            continue
+        packet = conn.recv(n - len(data))
 
         if not packet:
             # Disconnected
@@ -153,15 +149,13 @@ def welcome_message_client(conn: socket.socket):
 ################################################################
 
 def handle_message(conn_handler, message: str):
-    logger = conn_handler.get_logger()
-    # Prints out the message (temporarily)
     # TODO: this
     try:
         message_dict = json.loads(message)
     except ValueError:
-        logger.error("Received invalid message: Can't parse JSON!")
+        conn_handler.logger.error("Received invalid message: Can't parse JSON!")
         return
 
-    logger.debug("Received message:")
+    conn_handler.logger.debug("Received message:")
     for x, y in message_dict.items():
-        logger.debug(f"  {x}: {y}")
+        conn_handler.logger.debug(f"  {x}: {y}")
