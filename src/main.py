@@ -12,7 +12,8 @@ DEFAULT_CONFIG = {
     "data_directory": os.path.abspath("data/"),
     "server_ip": "0.0.0.0",  # All interfaces
     "server_port": 47685,
-    "log_file": None
+    "log_file": None,
+    "debug_messages": False
 }
 
 def load_config():
@@ -45,7 +46,7 @@ def load_config():
 
 def setup_logger():
     global MAIN_LOGGER
-    logger.setup(color_usage=CONFIG["colored_output"], log_file=CONFIG["log_file"])
+    logger.setup(color_usage=CONFIG["colored_output"], log_file=CONFIG["log_file"], debug=CONFIG["debug_messages"])
     MAIN_LOGGER = logger.Logger("MAIN")
 
 def disp_name(s: str):

@@ -8,5 +8,6 @@
   "max_clients": 10,
   "max_servers": 20,
   "server_port": 47685,
-  "colored_output": true
+  "colored_output": true,
+  "debug_messages": false
 }

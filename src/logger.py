@@ -4,11 +4,12 @@ import datetime
 def get_time():
     return datetime.datetime.today().strftime('%d-%m-%Y %H:%M:%S')
 
-def setup(color_usage: bool, log_file: str):
+def setup(color_usage: bool, log_file: str, debug: bool):
     global use_color
     global _log_file
     use_color = color_usage
     _log_file = log_file
+    _debug = debug
 
     if log_file is None:
         return
@@ -87,3 +88,16 @@ class Logger:
         if _log_file is not None:
             with open(_log_file, "a") as f:
                 print(f"[{self.module_name}/OK {get_time()}]: {message}", file=f)
+
+    def debug(self, message):
+        if not _debug:
+            return
+
+        if self.use_color:
+            print(f"{Colors.GRAY}[{Colors.MODNAME}{self.module_name}/DEBUG {Colors.GRAY}{get_time()}]: {Colors.GRAY}{message}")
+        else:
+            print(f"[{self.module_name}/DEBUG {get_time()}]: {message}")
+
+        if _log_file is not None:
+            with open(_log_file, "a") as f:
+                print(f"[{self.module_name}/DEBUG {get_time()}]: {message}", file=f)

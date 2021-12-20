@@ -135,7 +135,16 @@ def welcome_message_client(conn: socket.socket):
 # MESSAGES HANDLER
 ################################################################
 
-def handle_message(conn: socket.socket, addr: tuple, message: bytes):
+def handle_message(conn_handler, message: str):
+    logger = conn_handler.get_logger()
     # Prints out the message (temporarily)
     # TODO: this
-    print(message)
+    try:
+        message_dict = json.loads(message)
+    except ValueError:
+        logger.error("Received invalid message: Can't parse JSON!")
+        return
+
+    logger.debug("Received message:")
+    for x, y in message_dict.items():
+        logger.debug(f"  {x}: {y}")
