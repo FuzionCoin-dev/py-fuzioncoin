@@ -7,6 +7,7 @@ def get_time():
 def setup(color_usage: bool, log_file: str, debug: bool):
     global use_color
     global _log_file
+    global _debug
     use_color = color_usage
     _log_file = log_file
     _debug = debug

@@ -14,11 +14,19 @@ class ConnHandler(threading.Thread):
         self.send_queue = []
 
     def run(self):
+        self.conn.setblocking(0)
         running = True
 
         while running:
-            message = protocol.recv_msg(self.conn)
-            protocol.handle_message(self, message)
+            try:
+                message = protocol.recv_msg(self.conn)
+            except protocol.DisconnectedError:
+                self.get_logger().warn("Connection has been closed by another peer.")
+                self.conn.close()
+                return
+
+            if message is not None:
+                protocol.handle_message(self, message)
 
             if len(self.send_queue) > 0:
                 protocol.send_msg(self.conn, self.send_queue.pop(0))

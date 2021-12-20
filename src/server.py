@@ -1,5 +1,6 @@
 import threading
 import socket
+import time
 
 import connection
 import protocol
@@ -14,13 +15,24 @@ class Server:
 
     def start(self):
         _logger.info("Starting server...")
-        threading.Thread(target=self.handler, daemon=True).start()
 
-    def handler(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.bind(self.address)
+        success = False
+
+        while not success:
+            try:
+                self.sock.bind(self.address)
+                success = True
+            except OSError:
+                _logger.error(f"Unable to bind address {self.address[0]}:{self.address[1]}! Retrying in 5 seconds...")
+                time.sleep(5)
+
         _logger.info(f"Bound address: {self.address[0]}" + (" (all interfaces)" if self.address[0] == "0.0.0.0" else "") + f" and port: {self.address[1]}")
 
+        threading.Thread(target=self.handler, daemon=True).start()
+        threading.Thread(target=self.conn_watchdog, daemon=True).start()
+
+    def handler(self):
         self.sock.listen()
         _logger.info("Listening for connections...")
 
@@ -40,9 +52,17 @@ class Server:
                 conn.shutdown(socket.SHUT_RDWR)
                 conn.close()
 
+    def conn_watchdog(self):
+        time.sleep(0.5)
+        while self.running:
+            for i in range(len(self._clients)):
+                if not self._clients[i].is_alive():
+                    self._clients.remove(i)
+
     def close(self):
         self.running = False
 
         for c in self._clients:
-            c.conn.shutdown(socket.SHUT_RDWR)
+            c.running = False
+            time.sleep(0.1)
             c.conn.close()

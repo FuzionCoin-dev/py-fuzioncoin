@@ -1,6 +1,7 @@
 import threading
 import socket
 import random
+import time
 
 import connection
 import logger
@@ -11,6 +12,8 @@ _logger = logger.Logger("CLIENT")
 class Client:
     def __init__(self):
         self._servers = []
+        self.active = True
+        threading.Thread(target=self.conn_watchdog, daemon=True).start()
 
     def connect(self, addr: str, port: int = 47685):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -39,9 +42,19 @@ class Client:
         self._servers.append(handler)
         return True
 
+    def conn_watchdog(self):
+        while self.active:
+            time.sleep(0.5)
+            for i in range(len(self._servers)):
+                if not self._servers[i].is_alive():
+                    self._servers.remove(i)
+
     def close(self):
+        self.active = False
+
         for s in self._servers:
-            s.conn.shutdown(socket.SHUT_RDWR)
+            s.running = False
+            time.sleep(0.1)
             s.conn.close()
 
 

@@ -5,6 +5,10 @@ import struct
 
 USER_AGENT = "FuzionCoin/v0.0.1/PyFuzc"
 
+class DisconnectedError(Exception):
+    pass
+
+
 ################################################################
 # MESSAGING SYSTEM
 ################################################################
@@ -15,9 +19,15 @@ def send_msg(conn, msg):
     conn.sendall(msg)
 
 def recv_msg(conn):
-    raw_msglen = recvall(conn, 4)
-    if not raw_msglen:
+    try:
+        raw_msglen = recvall(conn, 4)
+    except socket.error:
+        # No message available
         return None
+
+    if not raw_msglen:
+        # Disconnected
+        raise DisconnectedError
 
     msglen = struct.unpack(">I", raw_msglen)[0]
     return recvall(conn, msglen).decode("utf-8")
@@ -25,9 +35,16 @@ def recv_msg(conn):
 def recvall(conn, n):
     data = b""
     while len(data) < n:
-        packet = conn.recv(n - len(data))
+        try:
+            packet = conn.recv(n - len(data))
+        except socket.error:
+            # No message available
+            continue
+
         if not packet:
-            return None
+            # Disconnected
+            raise DisconnectedError
+
         data += packet
     return data
 
