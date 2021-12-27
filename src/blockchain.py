@@ -10,7 +10,7 @@ class PrivateKey:
         signature = self.content.sign(message)
         return signature
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.content.to_string()
 
 class PublicKey:
@@ -18,14 +18,14 @@ class PublicKey:
         self.content = privkey.content.verifying_key
         self.pem = self.content.to_pem()
 
-    def verify(self, message, signature):
+    def verify(self, message, signature) -> bool:
         try:
             self.content.verify(signature, message)
             return True
         except ecdsa.BadSignatureError:
             return False
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.content.to_string()
 
 class Transaction:
@@ -35,14 +35,20 @@ class Transaction:
         self.amount = amount
         self.signature = None
 
-    def __str__(self):
+    def str_nosig(self) -> list:
+        return f"{self.sender}:{self.recipient}:{self.amount}"
+
+    def __str__(self) -> str:
+        if self.signature is None:
+            return self.str_nosig()
+
         return f"{self.sender}:{self.recipient}:{self.amount}:{self.signature}"
 
     def sign(self, privkey):
-        self.signature = privkey.sign(self.__str__.encode("utf-8"))
+        self.signature = privkey.sign(self.str_nosig().encode("utf-8"))
 
     def verify_signature(self, pubkey):
-        return pubkey.verify(self.signature, self.__str__.encode("utf-8"))
+        return pubkey.verify(self.signature, self.str_nosig().encode("utf-8"))
 
 class Block:
     def __init__(self, height: int, transactions: list, perv_hash: str = "0"*64, nonce: int = 0):
@@ -52,7 +58,7 @@ class Block:
         self.nonce = nonce
         self.hash = self.calculate_hash()
 
-    def calculate_hash(self):
+    def calculate_hash(self) -> str:
         hashing_text = f"{self.height}#{self.perv_hash}#{t for t in self.transactions}#{self.nonce}"
 
         h = sha256(hashing_text.encode("utf-8")).hexdigest()
@@ -67,6 +73,9 @@ class Blockchain:
 
     def add_block(self, block: Block):
         self.block_list.append(block)
+
+    def get_block(self, pos: int) -> Block:
+        return self.block_list[pos]
 
     def mine(self, block: Block):
         while True:

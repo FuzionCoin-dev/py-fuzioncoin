@@ -17,7 +17,7 @@ class ConnHandler(threading.Thread):
         self.send_queue = []
         self.logger = logger.Logger(f"CONN/{self.addr[0]}:{self.addr[1]}")
 
-    handle_exception(logger)
+    @handle_exception(logger)
     def run(self):
         self.conn.setblocking(0)
         running = True
@@ -31,11 +31,18 @@ class ConnHandler(threading.Thread):
                 return
 
             if message is not None:
-                protocol.handle_message(self, message)
+                try:
+                    protocol.handle_message(self, message)
+                except protocol.InvalidMessageReceived as err:
+                    self.logger.error(
+                        "Received invalid message message from another peer:" +
+                        f"    {err}" +
+                        "    Ignoring."
+                    )
 
             if len(self.send_queue) > 0:
                 protocol.send_msg(self.conn, self.send_queue.pop(0))
 
-    handle_exception(logger)
+    @handle_exception(logger)
     def send(message: bytes):
         self.send_queue.append(message)

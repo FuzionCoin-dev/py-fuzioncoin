@@ -3,11 +3,15 @@ import json
 import time
 import struct
 
+import blockchain
+
 USER_AGENT = "FuzionCoin/v0.0.1/PyFuzc"
 
 class DisconnectedError(Exception):
     pass
 
+class InvalidMessageReceived(Exception):
+    pass
 
 ################################################################
 # MESSAGING SYSTEM
@@ -18,7 +22,7 @@ def send_msg(conn, msg):
     msg = struct.pack(">I", len(msg)) + msg
     conn.sendall(msg)
 
-def recv_msg(conn):
+def recv_msg(conn) -> str:
     try:
         raw_msglen = recvall(conn, 4)
     except socket.error:
@@ -55,7 +59,7 @@ def broadcast(msg: str, server, client):
 # WELCOME MESSAGES (ENSTABILISHING CONNECTION)
 ################################################################
 
-def welcome_message_server(conn: socket.socket):
+def welcome_message_server(conn: socket.socket) -> tuple:
     message_content = {
         "method": "welcome",
         "ua": USER_AGENT
@@ -102,7 +106,7 @@ def welcome_message_client_cancel_connection(conn: socket.socket, reason: str):
 
 
 
-def welcome_message_client(conn: socket.socket):
+def welcome_message_client(conn: socket.socket) -> tuple:
     message = None
     start_time = time.time()
 
@@ -159,3 +163,14 @@ def handle_message(conn_handler, message: str):
     conn_handler.logger.debug("Received message:")
     for x, y in message_dict.items():
         conn_handler.logger.debug(f"  {x}: {y}")
+
+def handle_inv(conn_handler, message: dict):
+    # TODO: this
+    if message["type"] == "tx":
+        # Transaction
+        pass
+    elif message["type"] == "block":
+        height = message["height"]
+        hash = message["hash"]
+    else:
+        raise InvalidMessageReceived("(INV) Invalid type of declared known element!")

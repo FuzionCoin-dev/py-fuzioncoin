@@ -19,16 +19,46 @@ DEFAULT_CONFIG = {
     "debug_messages": False
 }
 
+def is_valid_address(address: str) -> tuple:
+    if address.replace(".", "").isnumeric():
+        # Address is IP
+        for i in address.split("."):
+            if i < 0 or i > 255:
+                return (False, "IP byte out of valid range.")
+
+    if not ":" in address:
+        return (True, None)
+
+    if address.count(":") > 1:
+        return (False, "Too many colons in address. Is it valid IPv4 or domain name?")
+
+    p = address.split(":")[1]
+
+    try:
+        p = int(p)
+    except ValueError:
+        return (False, "Port number isn't integer!")
+
+    if p < 1 or p > 65535:
+        return (False, "Port number isn't in valid ports range (1 - 65535)")
+
+    # All checks passed
+    return (True, None)
+
+
 def load_config():
     global CONFIG
 
     print("Loading configuration...")
-    try:
-        CONFIG = json.load(args.config)
-    except:
-        print("ERROR: Failed to parse configuration file!")
-        print("       This is not a valid JSON file")
-        raise SystemExit
+    if args.config is None:
+        CONFIG = DEFAULT_CONFIG.copy()
+    else:
+        try:
+            CONFIG = json.load(args.config)
+        except:
+            print("ERROR: Failed to parse configuration file!")
+            print("       This is not a valid JSON file")
+            raise SystemExit
 
     for x, y in DEFAULT_CONFIG.items():
         if not x in CONFIG:
@@ -43,6 +73,14 @@ def load_config():
         if x == "data_directory" or x == "logs_directory":
             if CONFIG[x] is not None:
                 CONFIG[x] = os.path.abspath(CONFIG[x])
+
+    for tn_addr in CONFIG["trusted_nodes"]:
+        chk = is_valid_address(tn_addr)
+        if not chk[0]:
+            print("ERROR: Failed to parse configuration file!")
+            print(f"       Invalid trusted node address: {tn_addr}")
+            print(f"       {chk[1]}")
+            raise SystemExit
 
     args.config.close()
 
@@ -132,18 +170,27 @@ if __name__ == "__main__":
         required=False,
         metavar="PATH",
         dest="config",
-        default=os.path.join(os.getcwd(), "config.json")
+        default=None
     )
 
     args = parser.parse_args()
 
-    try:
-        if args.config.startswith("/"):
-            args.config = open(args.config, "r")
+    if args.config is None:
+        pth = os.path.join(os.getcwd(), "config.json")
+        if os.path.exists(pth):
+            args.config = open(pth, "r")
         else:
-            args.config = open(os.path.join(args.launch_path, args.config), "r")
-    except:
-        raise TypeError("Invalid configuration file path!")
+            print("WARNING: config.json does not exist and another configuration file was not specified.")
+            print("         Loading default configuration (with no trusted peers).")
+            # args.config is still None!
+    else:
+        try:
+            if args.config.startswith("/"):
+                args.config = open(args.config, "r")
+            else:
+                args.config = open(os.path.join(args.launch_path, args.config), "r")
+        except:
+            raise TypeError("Invalid configuration file path!")
 
     load_config()
     setup_logger()
