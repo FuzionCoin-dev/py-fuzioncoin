@@ -23,7 +23,7 @@ def is_valid_address(address: str) -> tuple:
     if address.replace(".", "").isnumeric():
         # Address is IP
         for i in address.split("."):
-            if i < 0 or i > 255:
+            if int(i) < 0 or int(i) > 255:
                 return (False, "IP byte out of valid range.")
 
     if not ":" in address:
