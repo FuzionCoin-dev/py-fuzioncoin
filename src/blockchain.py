@@ -1,54 +1,136 @@
-from hashlib import sha256
-import ecdsa
+import hashlib
+import secrets
+import json
+
+import ecc
+
+################################################################
+# USEFUL FUNCTIONS
+################################################################
+
+def hash256(data: bytes) -> bytes:
+    return hashlib.sha256(hashlib.sha256(data).digest()).digest()
+
+def generate_secret_key() -> int:
+    x = secrets.token_bytes(4096)
+    h = hash256(x)
+
+    return int.from_bytes(h, "big")
+
+def address_generator(pubkey: ecc.Point) -> str:
+    data = pubkey.sec(True)
+    mainpart = hashlib.blake2b(hashlib.sha256(data).digest(), digest_size=20).digest()
+    checksum = hashlib.sha256(mainpart).digest()[:4]
+    return "0x" + (checksum + mainpart).hex()
+
+################################################################
+# SIMPLER PrivateKey AND PublicKey OBJECTS
+################################################################
 
 class PrivateKey:
-    def __init__(self):
-        self.content = ecdsa.SigningKey.generate()
-        self.pem = self.content.to_pem()
+    def __init__(self, secret: int = None):
+        if secret is None:
+            secret = generate_secret_key()
 
-    def sign(self, message):
-        signature = self.content.sign(message)
-        return signature
+        self.content = ecc.PrivateKey(secret)
 
-    def __str__(self) -> str:
-        return self.content.to_string()
+    def sign(self, message: bytes) -> ecc.Signature:
+        z = int.from_bytes(hash256(message), "big")
+
+        return self.content.sign(z)
+
+    def wif(self, compression=True) -> str:
+        return self.content.wif(compression)
+
+    def serialize(self, compression=True) -> bytes: # Does the same thing as wif(), but returns bytes instead of str; for unification
+        return self.wif(compression).encode("ascii")
+
+    def __eq__(self, other) -> bool:
+        return self.content.secret == other.content.secret
+
+    def __repr__(self) -> str:
+        return f"PrivateKey({self.content.secret})"
+
+    @classmethod
+    def parse(cls, wif_str: str):
+        if isinstance(wif_str, bytes):
+            wif_str = wif_str.decode("ascii")
+
+        return cls(ecc.PrivateKey.parse(wif_str).secret)
 
 class PublicKey:
-    def __init__(self, privkey: PrivateKey):
-        self.content = privkey.content.verifying_key
-        self.pem = self.content.to_pem()
+    def __init__(self, privkey: PrivateKey, content = None):
+        if content is None:
+            self.content = privkey.content.point
+        else:
+            self.content = content
 
-    def verify(self, message, signature) -> bool:
-        try:
-            self.content.verify(signature, message)
-            return True
-        except ecdsa.BadSignatureError:
-            return False
+        self.address = address_generator(self.content)
 
-    def __str__(self) -> str:
-        return self.content.to_string()
+    def verify(self, message: bytes, signature: ecc.Signature) -> bool:
+        z = int.from_bytes(hash256(message), "big")
+
+        return self.content.verify(z, signature)
+
+    def sec(self, compression=True) -> bytes:
+        return self.content.sec(compression)
+
+    def serialize(self, compression=True) -> bytes:  # Does the same thing as sec(); for unification
+        return self.sec(compression)
+
+    def __eq__(self, other) -> bool:
+        return self.content== other.content
+
+    def __repr__(self) -> str:
+        return f"PublicKey(x={self.content.x.num}, y={self.content.y.num})"
+
+    @classmethod
+    def parse(cls, sec_bin):
+        return cls(None, ecc.S256Point.parse(sec_bin))
+
+################################################################
+# ACTUAL BLOCKCHAIN
+################################################################
 
 class Transaction:
-    def __init__(self, sender: PublicKey, recipient: PublicKey, amount):
-        self.sender = sender
-        self.recipient = recipient
-        self.amount = amount
-        self.signature = None
+    def __init__(self, version, inputs, outputs, locktime):
+        self.version = version
+        self.inputs = inputs
+        self.outputs = outputs
+        self.locktime = locktime
 
-    def str_nosig(self) -> list:
-        return f"{self.sender}:{self.recipient}:{self.amount}"
+    def __repr__(self) -> str:
+        inputs = ""
 
-    def __str__(self) -> str:
-        if self.signature is None:
-            return self.str_nosig()
+        for input in self.inputs:
+            inputs += f"{input.__repr__()}\n"
 
-        return f"{self.sender}:{self.recipient}:{self.amount}:{self.signature}"
+        outputs = ""
 
-    def sign(self, privkey):
-        self.signature = privkey.sign(self.str_nosig().encode("utf-8"))
+        for output in self.outputs:
+            outputs += f"{output.__repr__()}\n"
 
-    def verify_signature(self, pubkey):
-        return pubkey.verify(self.signature, self.str_nosig().encode("utf-8"))
+        return f"tx: {self.id()}\nver: {self.version}\nin:\n{inputs}\nout:\n{outputs}\nlocktime: {self.locktime}"
+
+    def hash(self) -> bytes:
+        return hash256(self.serialize())
+
+    def id(self) -> str:
+        return self.hash().hex()
+
+    @classmethod
+    def parse(cls, serialization: str):
+        try:
+            data = json.loads(serialization)
+        except:
+            raise ValueError("Cannot parse JSON serialization")
+
+        version = data["version"]
+        inputs = data["inputs"]
+        outputs = data["outputs"]
+
+        # TODO
+
 
 class Block:
     def __init__(self, height: int, transactions: list, perv_hash: str = "0"*64, nonce: int = 0):
