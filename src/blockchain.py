@@ -33,7 +33,6 @@ class Signature:
 
     def serialize(self) -> str:
         return json.dumps({
-            "type": "signature",
             "r": self.content.r,
             "s": self.content.s
         })
@@ -54,19 +53,13 @@ class Signature:
         except json.JSONDecodeError:
             raise ValueError("Cannot parse JSON serialization")
 
-        if not "type" in data:
-            raise ValueError("Invalid JSON serialization")
-
-        if str(data["type"]).lower() != "signature":
-            raise ValueError("This is not Signature JSON serialization")
-
         try:
             return cls(
                 r = data["r"],
                 s = data["s"]
             )
         except KeyError:
-            raise ValueError("Invalid JSON serialization")
+            raise ValueError("This is not valid Signature JSON serialization")
 
 
 class PrivateKey:
@@ -85,7 +78,6 @@ class PrivateKey:
 
     def serialize(self) -> bytes:
         return json.dumps({
-            "type": "privatekey",
             "secret": self.content.secret
         })
 
@@ -105,18 +97,12 @@ class PrivateKey:
         except json.JSONDecodeError:
             raise ValueError("Cannot parse JSON serialization")
 
-        if not "type" in data:
-            raise ValueError("Invalid JSON serialization")
-
-        if str(data["type"]).lower() != "privatekey":
-            raise ValueError("This is not PrivateKey JSON serialization")
-
         try:
             return cls(
                 secret = data["secret"]
             )
         except KeyError:
-            raise ValueError("Invalid JSON serialization")
+            raise ValueError("This is not valid PrivateKey JSON serialization")
 
 class PublicKey:
     def __init__(self, privkey: PrivateKey, content = None):
@@ -134,7 +120,6 @@ class PublicKey:
 
     def serialize(self) -> str:
         return json.dumps({
-            "type": "publickey",
             "x": self.content.x.num,
             "y": self.content.y.num,
         })
@@ -155,12 +140,6 @@ class PublicKey:
         except json.JSONDecodeError:
             raise ValueError("Cannot parse JSON serialization")
 
-        if not "type" in data:
-            raise ValueError("Invalid JSON serialization")
-
-        if str(data["type"]).lower() != "publickey":
-            raise ValueError("This is not PublicKey JSON serialization")
-
         try:
             return cls(
                 privkey = None,
@@ -170,19 +149,17 @@ class PublicKey:
                 )
             )
         except KeyError:
-            raise ValueError("Invalid JSON serialization")
+            raise ValueError("This is not valid PublicKey JSON serialization")
 
 ################################################################
 # ACTUAL BLOCKCHAIN
 ################################################################
 
 class Transaction:
-    def __init__(self, sender: PublicKey, recipient: str, amount: int, signature: ecc.Signature = None):
+    def __init__(self, sender: PublicKey, recipient: str, amount: int, signature: Signature = None):
         self.sender = sender
         self.recipient = recipient
         self.amount = amount       # 1 means 1/10000000000 of FUZC
-
-        self.datatext = self.sender.serialize() + self.recipient.encode("ascii") + self.amount.to_bytes((self.amount.bit_length() + 7) // 8, "big")
 
         if signature is not None:
             if not self.verify():
@@ -197,16 +174,33 @@ class Transaction:
         if PublicKey(privkey) != self.sender:
             raise ValueError("This private key does not belong to sender")
 
-        self.signature = privkey.sign(self.datatext)
+        m_sender = self.sender.content.x.num.to_bytes(32, "big") + self.sender.content.y.num.to_bytes(32, "big") # 64 bytes
+        m_recipient = self.recipient.encode("ascii") # 50 bytes
+        m_amount = self.amount.to_bytes((self.amount.bit_length() + 7) // 8, "big") # variable size
+
+        m = m_sender + m_recipient + m_amount
+
+        self.signature = privkey.sign(m)
 
     def verify(self) -> bool:
-        return
+        m_sender = self.sender.content.x.num.to_bytes(32, "big") + self.sender.content.y.num.to_bytes(32, "big") # 64 bytes
+        m_recipient = self.recipient.encode("ascii") # 50 bytes
+        m_amount = self.amount.to_bytes((self.amount.bit_length() + 7) // 8, "big") # variable size
 
-    def serialize(self) -> bytes:
-        return self.signature.serialize() + self.datatext
+        m = m_sender + m_recipient + m_amount
+
+        return self.sender.verify(m, self.signature)
+
+    def serialize(self) -> str:
+        return json.dumps({
+            "sender": self.sender.serialize(),
+            "recipient": self.recipient,
+            "amount": self.amount,
+            "signature": self.signature.serialize()
+        })
 
     def __repr__(self) -> str:
-        return f"tx:\n sender: {self.sender}\n recipient: {self.recipient}\n amount: {self.amount}"
+        return f"tx:\n sender: {self.sender.address}\n recipient: {self.recipient}\n amount: {self.amount}\n signed: {self.signature is not None}"
 
     @classmethod
     def parse(cls, serialization: str):
@@ -215,13 +209,15 @@ class Transaction:
         except json.JSONDecodeError:
             raise ValueError("Cannot parse JSON serialization")
 
-        version = data["ver"]
-        inputs = data["in"]
-        outputs = data["out"]
-        locktime = data["lt"]
-
-        return cls(version, inputs, outputs, locktime)
-
+        try:
+            return cls(
+                sender = PublicKey.parse(data["sender"]),
+                recipient = data["recipient"],
+                amount = data["amount"],
+                signature = Signature.parse(data["signature"])
+            )
+        except KeyError:
+            raise ValueError("This is not valid Transaction serialization")
 
 class Block:
     def __init__(self, height: int, transactions: list, perv_hash: str = "0"*64, nonce: int = 0):
@@ -234,10 +230,7 @@ class Block:
     def calculate_hash(self) -> str:
         hashing_text = f"{self.height}#{self.perv_hash}#{t for t in self.transactions}#{self.nonce}"
 
-        h = sha256(hashing_text.encode("utf-8")).hexdigest()
-        h2 = sha256(h.encode("utf-8")).hexdigest()
-
-        return h2
+        return hash256(hashing_text.encode("ascii"))
 
 class Blockchain:
     def __init__(self):
