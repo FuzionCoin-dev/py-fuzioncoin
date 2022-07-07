@@ -2,8 +2,6 @@ import hashlib
 import hmac
 from io import BytesIO
 
-import b58
-
 class FieldElement:
     def __init__(self, num: int, prime: int):
         if num >= prime or num < 0:
@@ -179,37 +177,6 @@ class S256Point(Point):
 
         return total.x.num == sig.r
 
-    def sec(self, compression=True) -> bytes:
-        if compression:
-            return (b"\x02" if self.y.num % 2 == 0 else b"\x03") + self.x.num.to_bytes(32, 'big')
-
-        return b"\x04" + self.x.num.to_bytes(32, "big") + self.y.num.to_bytes(32, "big")
-
-    @classmethod
-    def parse(cls, sec_bin):
-        if sec_bin[0] == 4:
-            x = int.from_bytes(sec_bin[1:33], 'big')
-            y = int.from_bytes(sec_bin[33:65], 'big')
-            return cls(x=x, y=y)
-
-        is_even = sec_bin[0] == 2
-        x = S256Field(int.from_bytes(sec_bin[1:], 'big'))
-
-        alpha = x**3 + S256Field(S256_CURVE_B)
-        beta = alpha.sqrt()
-
-        if beta.num % 2 == 0:
-            even_beta = beta
-            odd_beta = S256Field(S256_PRIME - beta.num)
-        else:
-            even_beta = S256Field(S256_PRIME - beta.num)
-            odd_beta = beta
-
-        if is_even:
-            return cls(x, even_beta)
-        else:
-            return cls(x, odd_beta)
-
 S256_G = S256Point(
     0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798,
     0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8
@@ -221,59 +188,7 @@ class Signature:
         self.s = s
 
     def __repr__(self) -> str:
-        return "Signature(r={:x}, s={:x})".format(self.r, self.s)
-
-    def der(self) -> bytes:
-        rbin = self.r.to_bytes(32, byteorder="big").lstrip(b"\x00")
-
-        if rbin[0] & 0x80:
-            rbin = b"\x00" + rbin
-
-        result = bytes([2, len(rbin)]) + rbin
-        sbin = self.s.to_bytes(32, byteorder="big").lstrip(b"\x00")
-
-        if sbin[0] & 0x80:
-            sbin = b"\x00" + sbin
-
-        result += bytes([2, len(sbin)]) + sbin
-        return bytes([0x30, len(result)]) + result
-
-    def serialize(self, compression=None) -> bytes: # Does the same thing as sec(); for unification
-        return self.der()
-
-    @classmethod
-    def parse(cls, signature_bin):
-        s = BytesIO(signature_bin)
-        compound = s.read(1)[0]
-
-        if compound != 0x30:
-            raise SyntaxError("Bad signature")
-
-        length = s.read(1)[0]
-
-        if length + 2 != len(signature_bin):
-            raise SyntaxError("Bad signature length")
-
-        marker = s.read(1)[0]
-
-        if marker != 0x02:
-            raise SyntaxError("Bad signature")
-
-        rlength = s.read(1)[0]
-        r = int.from_bytes(s.read(rlength), 'big')
-        marker = s.read(1)[0]
-
-        if marker != 0x02:
-            raise SyntaxError("Bad signature")
-
-        slength = s.read(1)[0]
-        s = int.from_bytes(s.read(slength), 'big')
-
-        if len(signature_bin) != 6 + rlength + slength:
-            raise SyntaxError("The signature is too long")
-
-        return cls(r, s)
-
+        return f"Signature(r={self.r}, s={self.s})"
 
 class PrivateKey:
     def __init__(self, secret):
@@ -320,23 +235,3 @@ class PrivateKey:
 
             k = hmac.new(k, v + b'\x00', s256).digest()
             v = hmac.new(k, v, s256).digest()
-
-    def wif(self, compression=True) -> str:
-        output = b"\x75" # FuzionCoin specific prefix (there is 0x80 in Bitcoin)
-        output += self.secret.to_bytes(32, "big")
-
-        if compression:
-            output += b"\x01" # Suffix for pubkey in compressed SEC
-
-        return b58.encode_with_checksum(output)
-
-    @classmethod
-    def parse(cls, wif_str):
-        w = b58.decode_with_checksum(wif_str)
-
-        if w[0] != 0x75:
-            raise ValueError("It is not valid FuzionCoin WIF string")
-
-        secret = int.from_bytes(w[1:33], "big")
-
-        return cls(secret)

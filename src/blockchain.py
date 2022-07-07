@@ -17,15 +17,57 @@ def generate_secret_key() -> int:
 
     return int.from_bytes(h, "big")
 
-def address_generator(pubkey: ecc.Point) -> str:
-    data = pubkey.sec(True)
+def address_generator(pubkey: ecc.S256Point) -> str:
+    data = pubkey.x.num.to_bytes(32, "big") + pubkey.y.num.to_bytes(32, "big")
     mainpart = hashlib.blake2b(hashlib.sha256(data).digest(), digest_size=20).digest()
     checksum = hashlib.sha256(mainpart).digest()[:4]
     return "0x" + (checksum + mainpart).hex()
 
 ################################################################
-# SIMPLER PrivateKey AND PublicKey OBJECTS
+# SIMPLE TO USE Signature, PrivateKey AND PublicKey OBJECTS
 ################################################################
+
+class Signature:
+    def __init__(self, r, s):
+        self.content = ecc.Signature(r, s)
+
+    def serialize(self) -> str:
+        return json.dumps({
+            "type": "signature",
+            "r": self.content.r,
+            "s": self.content.s
+        })
+
+    def __repr__(self) -> str:
+        return self.content.__repr__()
+
+    def __eq__(self, other) -> bool:
+        return self.content.r == other.content.r and self.content.s == other.content.s
+
+    def __ne__(self, other) -> bool:
+        return not self == other
+
+    @classmethod
+    def parse(cls, serialization):
+        try:
+            data = json.loads(serialization)
+        except json.JSONDecodeError:
+            raise ValueError("Cannot parse JSON serialization")
+
+        if not "type" in data:
+            raise ValueError("Invalid JSON serialization")
+
+        if str(data["type"]).lower() != "signature":
+            raise ValueError("This is not Signature JSON serialization")
+
+        try:
+            return cls(
+                r = data["r"],
+                s = data["s"]
+            )
+        except KeyError:
+            raise ValueError("Invalid JSON serialization")
+
 
 class PrivateKey:
     def __init__(self, secret: int = None):
@@ -34,29 +76,47 @@ class PrivateKey:
 
         self.content = ecc.PrivateKey(secret)
 
-    def sign(self, message: bytes) -> ecc.Signature:
+    def sign(self, message: bytes) -> Signature:
         z = int.from_bytes(hash256(message), "big")
 
-        return self.content.sign(z)
+        s1 = self.content.sign(z)
 
-    def wif(self, compression=True) -> str:
-        return self.content.wif(compression)
+        return Signature(s1.r, s1.s)
 
-    def serialize(self, compression=True) -> bytes: # Does the same thing as wif(), but returns bytes instead of str; for unification
-        return self.wif(compression).encode("ascii")
+    def serialize(self) -> bytes:
+        return json.dumps({
+            "type": "privatekey",
+            "secret": self.content.secret
+        })
 
     def __eq__(self, other) -> bool:
         return self.content.secret == other.content.secret
+
+    def __ne__(self, other) -> bool:
+        return not self == other
 
     def __repr__(self) -> str:
         return f"PrivateKey({self.content.secret})"
 
     @classmethod
-    def parse(cls, wif_str: str):
-        if isinstance(wif_str, bytes):
-            wif_str = wif_str.decode("ascii")
+    def parse(cls, serialization: str):
+        try:
+            data = json.loads(serialization)
+        except json.JSONDecodeError:
+            raise ValueError("Cannot parse JSON serialization")
 
-        return cls(ecc.PrivateKey.parse(wif_str).secret)
+        if not "type" in data:
+            raise ValueError("Invalid JSON serialization")
+
+        if str(data["type"]).lower() != "privatekey":
+            raise ValueError("This is not PrivateKey JSON serialization")
+
+        try:
+            return cls(
+                secret = data["secret"]
+            )
+        except KeyError:
+            raise ValueError("Invalid JSON serialization")
 
 class PublicKey:
     def __init__(self, privkey: PrivateKey, content = None):
@@ -67,69 +127,100 @@ class PublicKey:
 
         self.address = address_generator(self.content)
 
-    def verify(self, message: bytes, signature: ecc.Signature) -> bool:
+    def verify(self, message: bytes, signature: Signature) -> bool:
         z = int.from_bytes(hash256(message), "big")
 
-        return self.content.verify(z, signature)
+        return self.content.verify(z, signature.content)
 
-    def sec(self, compression=True) -> bytes:
-        return self.content.sec(compression)
-
-    def serialize(self, compression=True) -> bytes:  # Does the same thing as sec(); for unification
-        return self.sec(compression)
+    def serialize(self) -> str:
+        return json.dumps({
+            "type": "publickey",
+            "x": self.content.x.num,
+            "y": self.content.y.num,
+        })
 
     def __eq__(self, other) -> bool:
-        return self.content== other.content
+        return self.content == other.content
+
+    def __ne__(self, other) -> bool:
+        return not self == other
 
     def __repr__(self) -> str:
         return f"PublicKey(x={self.content.x.num}, y={self.content.y.num})"
 
     @classmethod
-    def parse(cls, sec_bin):
-        return cls(None, ecc.S256Point.parse(sec_bin))
+    def parse(cls, serialization: str):
+        try:
+            data = json.loads(serialization)
+        except json.JSONDecodeError:
+            raise ValueError("Cannot parse JSON serialization")
+
+        if not "type" in data:
+            raise ValueError("Invalid JSON serialization")
+
+        if str(data["type"]).lower() != "publickey":
+            raise ValueError("This is not PublicKey JSON serialization")
+
+        try:
+            return cls(
+                privkey = None,
+                content = ecc.S256Point(
+                    x = data["x"],
+                    y = data["y"]
+                )
+            )
+        except KeyError:
+            raise ValueError("Invalid JSON serialization")
 
 ################################################################
 # ACTUAL BLOCKCHAIN
 ################################################################
 
 class Transaction:
-    def __init__(self, version, inputs, outputs, locktime):
-        self.version = version
-        self.inputs = inputs
-        self.outputs = outputs
-        self.locktime = locktime
+    def __init__(self, sender: PublicKey, recipient: str, amount: int, signature: ecc.Signature = None):
+        self.sender = sender
+        self.recipient = recipient
+        self.amount = amount       # 1 means 1/10000000000 of FUZC
+
+        self.datatext = self.sender.serialize() + self.recipient.encode("ascii") + self.amount.to_bytes((self.amount.bit_length() + 7) // 8, "big")
+
+        if signature is not None:
+            if not self.verify():
+                raise ValueError("Invalid signature")
+
+        self.signature = signature
+
+    def sign(self, privkey: PrivateKey):
+        if self.signature is not None:
+            raise ValueError("This transaction is already signed")
+
+        if PublicKey(privkey) != self.sender:
+            raise ValueError("This private key does not belong to sender")
+
+        self.signature = privkey.sign(self.datatext)
+
+    def verify(self) -> bool:
+        return
+
+    def serialize(self) -> bytes:
+        return self.signature.serialize() + self.datatext
 
     def __repr__(self) -> str:
-        inputs = ""
-
-        for input in self.inputs:
-            inputs += f"{input.__repr__()}\n"
-
-        outputs = ""
-
-        for output in self.outputs:
-            outputs += f"{output.__repr__()}\n"
-
-        return f"tx: {self.id()}\nver: {self.version}\nin:\n{inputs}\nout:\n{outputs}\nlocktime: {self.locktime}"
-
-    def hash(self) -> bytes:
-        return hash256(self.serialize())
-
-    def id(self) -> str:
-        return self.hash().hex()
+        return f"tx:\n sender: {self.sender}\n recipient: {self.recipient}\n amount: {self.amount}"
 
     @classmethod
     def parse(cls, serialization: str):
         try:
             data = json.loads(serialization)
-        except:
+        except json.JSONDecodeError:
             raise ValueError("Cannot parse JSON serialization")
 
-        version = data["version"]
-        inputs = data["inputs"]
-        outputs = data["outputs"]
+        version = data["ver"]
+        inputs = data["in"]
+        outputs = data["out"]
+        locktime = data["lt"]
 
-        # TODO
+        return cls(version, inputs, outputs, locktime)
 
 
 class Block:
