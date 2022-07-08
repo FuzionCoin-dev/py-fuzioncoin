@@ -3,7 +3,6 @@ import secrets
 import json
 
 import ecc
-import logger
 
 ################################################################
 # USEFUL FUNCTIONS
@@ -25,7 +24,7 @@ def address_generator(pubkey: ecc.S256Point) -> str:
     return "0x" + (checksum + mainpart).hex()
 
 def get_difficulty(height: int) -> int:
-    start_difficulty = 5
+    start_difficulty = 6
 
     return start_difficulty + (height // 100000) # difficulty of mining increases every 100000 blocks
 
@@ -162,10 +161,11 @@ class PublicKey:
 ################################################################
 
 class Transaction:
-    def __init__(self, sender: PublicKey, recipient: str, amount: int, signature: Signature = None):
+    def __init__(self, sender: PublicKey, recipient: str, amount: int, prev_hash: bytes, signature: Signature = None):
         self.sender = sender
         self.recipient = recipient
-        self.amount = amount       # 1 means 1/10000000000 of FUZC
+        self.amount = amount       # 1 means 1/000000000 of FUZC
+        self.prev_hash = prev_hash
 
         if signature is not None:
             if not self.verify():
@@ -184,7 +184,7 @@ class Transaction:
         m_recipient = self.recipient.encode("ascii") # 50 bytes
         m_amount = self.amount.to_bytes((self.amount.bit_length() + 7) // 8, "big") # variable size
 
-        m = m_sender + m_recipient + m_amount
+        m = self.prev_hash + m_sender + m_recipient + m_amount
 
         self.signature = privkey.sign(m)
 
@@ -193,7 +193,7 @@ class Transaction:
         m_recipient = self.recipient.encode("ascii") # 50 bytes
         m_amount = self.amount.to_bytes((self.amount.bit_length() + 7) // 8, "big") # variable size
 
-        m = m_sender + m_recipient + m_amount
+        m = self.prev_hash + m_sender + m_recipient + m_amount
 
         return self.sender.verify(m, self.signature)
 
@@ -202,7 +202,7 @@ class Transaction:
         m_recipient = self.recipient.encode("ascii") # 50 bytes
         m_amount = self.amount.to_bytes((self.amount.bit_length() + 7) // 8, "big") # variable size
 
-        m = m_sender + m_recipient + m_amount
+        m = self.prev_hash + m_sender + m_recipient + m_amount
 
         return hash256(m)
 
@@ -210,8 +210,9 @@ class Transaction:
         return json.dumps({
             "sender": self.sender.serialize(),
             "recipient": self.recipient,
-            "amount": self.amount,
+            "amount": self.amount / 1000000000,
             "signature": self.signature.serialize(),
+            "prev_hash": self.prev_hash.hex(),
             "hash": self.hash().hex()
         })
 
@@ -226,17 +227,22 @@ class Transaction:
             raise ValueError("Cannot parse JSON serialization")
 
         try:
-            return cls(
+            out =  cls(
                 sender = PublicKey.parse(data["sender"]),
                 recipient = data["recipient"],
-                amount = data["amount"],
+                amount = int(data["amount"] * 1000000000),
+                prev_hash = bytes.fromhex(data["prev_hash"]),
                 signature = Signature.parse(data["signature"])
             )
+
+            if out.hash().hex() != data["hash"]:
+                raise ValueError("Invalid hash in JSON serialization")
+            
         except KeyError:
             raise ValueError("This is not valid Transaction serialization")
 
 class Block:
-    def __init__(self, height: int, transactions: List[Transaction], prev_hash: str = None, nonce: int = None):
+    def __init__(self, height: int, transactions: list[Transaction], prev_hash: str = None, nonce: int = None):
         self.height = height
         self.transactions = transactions
         self.prev_hash = prev_hash
@@ -268,15 +274,13 @@ class Block:
     def mine(self):
         difficulty = get_difficulty(self.height)
 
-        while self.hash()[0:difficulty] != bytes(difficulty):
+        while self.hash().hex()[0:difficulty] != "0" * difficulty:
             self.nonce += 1
-        
-        logger.Logger("MINER").info(f"Block mined:\n    height: {self.height}\n    hash: {self.hash().hex()}\n    nonce: {self.nonce}")
 
     def validate(self) -> bool:
         difficulty = get_difficulty(self.height)
 
-        if self.hash()[0:difficulty] != bytes(difficulty):
+        if self.hash().hex()[0:difficulty] != "0" * difficulty:
             return False
 
         for tx in self.transactions:
@@ -286,7 +290,7 @@ class Block:
         return True
 
     def __repr__(self) -> str:
-        return f"Block:\n height: {self.height}\n hash: {self.hash().hex()}\n nonce: {self.nonce}\n transactions: {len(self.transactions)}"
+        return f"block:\n height: {self.height}\n hash: {self.hash().hex()}\n nonce: {self.nonce}\n transactions: {len(self.transactions)}"
     
     @classmethod
     def parse(cls, serialization: str):
