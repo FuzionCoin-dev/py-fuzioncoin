@@ -3,6 +3,7 @@ import secrets
 import json
 
 import ecc
+import logger
 
 ################################################################
 # USEFUL FUNCTIONS
@@ -22,6 +23,11 @@ def address_generator(pubkey: ecc.S256Point) -> str:
     mainpart = hashlib.blake2b(hashlib.sha256(data).digest(), digest_size=20).digest()
     checksum = hashlib.sha256(mainpart).digest()[:4]
     return "0x" + (checksum + mainpart).hex()
+
+def get_difficulty(height: int) -> int:
+    start_difficulty = 5
+
+    return start_difficulty + (height // 100000) # difficulty of mining increases every 100000 blocks
 
 ################################################################
 # SIMPLE TO USE Signature, PrivateKey AND PublicKey OBJECTS
@@ -191,12 +197,22 @@ class Transaction:
 
         return self.sender.verify(m, self.signature)
 
+    def hash(self) -> bytes:
+        m_sender = self.sender.content.x.num.to_bytes(32, "big") + self.sender.content.y.num.to_bytes(32, "big") # 64 bytes
+        m_recipient = self.recipient.encode("ascii") # 50 bytes
+        m_amount = self.amount.to_bytes((self.amount.bit_length() + 7) // 8, "big") # variable size
+
+        m = m_sender + m_recipient + m_amount
+
+        return hash256(m)
+
     def serialize(self) -> str:
         return json.dumps({
             "sender": self.sender.serialize(),
             "recipient": self.recipient,
             "amount": self.amount,
-            "signature": self.signature.serialize()
+            "signature": self.signature.serialize(),
+            "hash": self.hash().hex()
         })
 
     def __repr__(self) -> str:
@@ -220,17 +236,73 @@ class Transaction:
             raise ValueError("This is not valid Transaction serialization")
 
 class Block:
-    def __init__(self, height: int, transactions: list, perv_hash: str = "0"*64, nonce: int = 0):
+    def __init__(self, height: int, transactions: List[Transaction], prev_hash: str = None, nonce: int = None):
         self.height = height
         self.transactions = transactions
-        self.perv_hash = perv_hash
+        self.prev_hash = prev_hash
         self.nonce = nonce
-        self.hash = self.calculate_hash()
 
-    def calculate_hash(self) -> str:
-        hashing_text = f"{self.height}#{self.perv_hash}#{t for t in self.transactions}#{self.nonce}"
+        if self.prev_hash is None:
+            self.prev_hash = bytes(32)
 
-        return hash256(hashing_text.encode("ascii"))
+        if self.nonce is None:
+            self.nonce = 0
+
+    def hash(self) -> bytes:
+        m =  len(self.transactions).to_bytes(4, "big") # max 2^32 transactions per block
+        m += b"".join([tx.hash() for tx in self.transactions])
+        m += self.prev_hash
+        m += self.nonce.to_bytes(8, "big")
+
+        return hash256(m)
+
+    def serialize(self) -> str:
+        return json.dumps({
+            "height": self.height,
+            "transactions": [tx.serialize() for tx in self.transactions],
+            "prev_hash": self.prev_hash.hex(),
+            "nonce": self.nonce,
+            "hash": self.hash().hex()
+        })
+
+    def mine(self):
+        difficulty = get_difficulty(self.height)
+
+        while self.hash()[0:difficulty] != bytes(difficulty):
+            self.nonce += 1
+        
+        logger.Logger("MINER").info(f"Block mined:\n    height: {self.height}\n    hash: {self.hash().hex()}\n    nonce: {self.nonce}")
+
+    def validate(self) -> bool:
+        difficulty = get_difficulty(self.height)
+
+        if self.hash()[0:difficulty] != bytes(difficulty):
+            return False
+
+        for tx in self.transactions:
+            if not tx.verify():
+                return False
+
+        return True
+
+    def __repr__(self) -> str:
+        return f"Block:\n height: {self.height}\n hash: {self.hash().hex()}\n nonce: {self.nonce}\n transactions: {len(self.transactions)}"
+    
+    @classmethod
+    def parse(cls, serialization: str):
+        try:
+            data = json.loads(serialization)
+        except json.JSONDecodeError:
+            raise ValueError("Cannot parse JSON serialization")
+
+        try:
+            return cls(
+                transactions = [Transaction.parse(tx) for tx in data["transactions"]],
+                prev_hash = bytes.fromhex(data["prev_hash"]),
+                nonce = data["nonce"]
+            )
+        except KeyError:
+            raise ValueError("This is not valid Block serialization")
 
 class Blockchain:
     def __init__(self):
