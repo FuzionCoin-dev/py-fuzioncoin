@@ -28,6 +28,14 @@ def get_difficulty(height: int) -> int:
 
     return start_difficulty + (height // 100000) # difficulty of mining increases every 100000 blocks
 
+def get_block_reward(height: int) -> int:
+    start_reward = 50 * 10**9
+
+    if height < 100000:
+        return start_reward
+
+    return int(start_reward / (2 * (height // 100000))) # reward of mining decrases every 100000 blocks
+
 ################################################################
 # SIMPLE TO USE Signature, PrivateKey AND PublicKey OBJECTS
 ################################################################
@@ -219,6 +227,12 @@ class Transaction:
     def __repr__(self) -> str:
         return f"tx:\n sender: {self.sender.address}\n recipient: {self.recipient}\n amount: {self.amount}\n signed: {self.signature is not None}"
 
+    def __eq__(self, other):
+        return self.hash() == other.hash()
+
+    def __ne__(self, other):
+        return not self == other
+
     @classmethod
     def parse(cls, serialization: str):
         try:
@@ -239,7 +253,59 @@ class Transaction:
                 raise ValueError("Invalid hash in JSON serialization")
             
         except KeyError:
-            raise ValueError("This is not valid Transaction serialization")
+            raise ValueError("This is not valid Transaction JSON serialization")
+
+class CoinbaseTransaction(Transaction):
+    def __init__(self, height: int, recipient: str, prev_hash: bytes):
+        super().__init__(
+            sender = None,
+            recipient = recipient,
+            amount = get_block_reward(height),
+            prev_hash = prev_hash
+        )
+
+        self.height = height
+
+    def sign(self, privkey: PrivateKey):
+        raise NotImplementedError("Coinbase transactions cannot be signed")
+
+    def verify(self) -> bool:
+        return self.amount == get_block_reward(self.height)
+
+    def hash(self) -> bytes:
+        return hash256(self.prev_hash + self.recipient.encode("ascii") + self.amount.to_bytes((self.amount.bit_length() + 7) // 8, "big"))
+
+    def serialize(self) -> str:
+        return json.dumps({
+            "height": self.height,
+            "recipient": self.recipient,
+            "amount": self.amount / 1000000000,
+            "prev_hash": self.prev_hash.hex(),
+            "hash": self.hash().hex()
+        })
+
+    def __repr__(self) -> str:
+        return f"coinbase:\n recipient: {self.recipient}\n amount: {self.amount}\n height: {self.height}"
+
+    @classmethod
+    def parse(cls, serialization: str):
+        try:
+            data = json.loads(serialization)
+        except json.JSONDecodeError:
+            raise ValueError("Cannot parse JSON serialization")
+
+        try:
+            out =  cls(
+                height = int(data["height"]),
+                recipient = data["recipient"],
+                prev_hash = bytes.fromhex(data["prev_hash"])
+            )
+
+            if out.hash().hex() != data["hash"]:
+                raise ValueError("Invalid hash in JSON serialization")
+            
+        except KeyError:
+            raise ValueError("This is not valid CoinbaseTransaction JSON serialization")
 
 class Block:
     def __init__(self, height: int, transactions: list[Transaction], prev_hash: str = None, nonce: int = None):
@@ -258,7 +324,7 @@ class Block:
         m =  len(self.transactions).to_bytes(4, "big") # max 2^32 transactions per block
         m += b"".join([tx.hash() for tx in self.transactions])
         m += self.prev_hash
-        m += self.nonce.to_bytes(8, "big")
+        m += self.nonce.to_bytes(16, "big")
 
         return hash256(m)
 
@@ -271,8 +337,20 @@ class Block:
             "hash": self.hash().hex()
         })
 
-    def mine(self):
+    def mine(self, reward_address: str, prev_tx_hash: bytes):
+        if len(self.transactions) > 0:
+            prev_tx_hash = self.transactions[-1].hash()
+
+        self.transactions.append(
+            CoinbaseTransaction(
+                height = self.height,
+                recipient = reward_address,
+                prev_hash = prev_tx_hash
+            )
+        )
+
         difficulty = get_difficulty(self.height)
+        self.nonce = 0
 
         while self.hash().hex()[0:difficulty] != "0" * difficulty:
             self.nonce += 1
@@ -310,22 +388,59 @@ class Block:
 
 class Blockchain:
     def __init__(self):
-        self.block_list = []
-        self.difficulty = 6
+        self.chain = []
+        self.pending_transactions = []
 
     def add_block(self, block: Block):
-        self.block_list.append(block)
+        if not block.validate():
+            raise ValueError("Invalid block")
 
-    def get_block(self, pos: int) -> Block:
-        return self.block_list[pos]
+        if len(self.chain) > 0:
+            if block.prev_hash != self.chain[-1].hash():
+                raise ValueError("Invalid or late block")
+        else:
+            if block.prev_hash != bytes(32):
+                raise ValueError("Previous hash of genesis block is not zero")
 
-    def mine(self, block: Block):
-        while True:
-            hash = block.calculate_hash()
-            if hash[:self.difficulty] == "0"*self.difficulty:
-                block.hash = hash
-                break
+        self.chain.append(block)
 
-            block.nonce += 1
+    def add_transaction(self, tx: Transaction):
+        if not tx.verify():
+            raise ValueError("Invalid transaction")
+        
+        self.pending_transactions.append(tx)
 
-        self.add_block(block)
+    def create_transaction(self, tx: Transaction):
+        self.add_transaction(tx)
+
+        # TODO: broadcast new transaction to all nodes
+
+    def mine(self, reward_address: str):
+        if len(self.chain) > 0:
+            last_block_hash = self.chain[-1].hash()
+            lest_tx_hash = self.chain[-1].transactions[-1].hash()
+        else:
+            last_block_hash = bytes(32)
+            lest_tx_hash = bytes(32)
+
+        new_block = Block(
+            height = len(self.chain),
+            transactions = self.pending_transactions,
+            prev_hash = last_block_hash
+        )
+
+        new_block.mine(
+            reward_address = reward_address,
+            prev_tx_hash = lest_tx_hash
+        )
+
+        for tx in self.pending_transactions.copy():
+            if tx in new_block.transactions:
+                try:
+                    self.pending_transactions.remove(tx)
+                except ValueError:
+                    pass
+
+        self.add_block(new_block)
+
+        # TODO: broadcast new block to all nodes
